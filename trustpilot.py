@@ -11,6 +11,7 @@ review_customers = []
 review_dates = []
 review_ratings = []
 review_texts = []
+review_links = []
 page_number = []
 
 # Initialize overall_rating variable
@@ -79,12 +80,21 @@ for i in range(from_page, to_page + 1):
             else:
                 review_texts.append(review_text.getText())
             
+            # Extract review link
+            review_link_elem = review.find("a", href=True, class_="link_link__IZzHN")
+            if review_link_elem and "/reviews/" in review_link_elem["href"]:
+                review_path = review_link_elem["href"]
+                review_link = f"https://www.trustpilot.com{review_path}"
+            else:
+                review_link = "N/A"
+            review_links.append(review_link)
+            
             # Trustpilot page number
             page_number.append(i)
 
 # Create final dataframe from lists
-df_reviews = pd.DataFrame(list(zip(review_titles, review_customers, review_dates, review_ratings, review_texts, page_number)),
-                columns =['review_title', 'review_customer', 'review_date', 'review_rating', 'review_text', 'page_number'])
+df_reviews = pd.DataFrame(list(zip(review_titles, review_customers, review_dates, review_ratings, review_texts, review_links, page_number)),
+                columns =['review_title', 'review_customer', 'review_date', 'review_rating', 'review_text', 'review_link', 'page_number'])
 
 # Save DataFrame to JSON file with total_reviews and overall_rating at the top
 output_data = {
