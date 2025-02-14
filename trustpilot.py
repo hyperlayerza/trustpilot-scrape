@@ -45,29 +45,29 @@ for i in range(from_page, to_page + 1):
 
     # Extract total reviews number (only once)
     if total_reviews is None:
-        total_reviews_elem = soup.find(class_="typography_body-l__KUYFJ typography_appearance-subtle__8_H2l styles_text__W4hWi")
+        total_reviews_elem = soup.find(class_="typography_body-l__v5JLj typography_appearance-subtle__PYOVM styles_text__r3o5y")
         total_reviews_text = extract_text(total_reviews_elem, "")
         total_reviews = re.search(r'\d+', total_reviews_text).group() if total_reviews_text else ""
 
     # Extract overall rating (only once)
     if overall_rating is None:
-        overall_rating_elem = soup.find(class_="typography_heading-m__T_L_X typography_appearance-default__AAY17")
+        overall_rating_elem = soup.find(class_="typography_body-l__v5JLj typography_appearance-subtle__PYOVM")
         overall_rating = extract_text(overall_rating_elem, "")
 
     # Loop through each review card
-    for review in soup.find_all(class_="paper_paper__1PY90 paper_outline__lwsUX card_card__lQWDv card_noPadding__D8PcU styles_reviewCard__hcAvl"):
-        review_rating_elem = review.find(class_="star-rating_starRating__4rrcf star-rating_medium__iN6Ty").findChild()
+    for review in soup.find_all(class_="paper_paper__EGeEb paper_outline__bqVmn card_card__yyGgu card_noPadding__OOiac styles_reviewCard__6j0RQ"):
+        review_rating_elem = review.find(class_="star-rating_starRating__sdbkn star-rating_medium__Oj7C9").findChild()
         rating_value = int(review_rating_elem["alt"].split()[1]) if review_rating_elem else 0
         
         # Only proceed if the rating is 4 stars or higher
         if rating_value >= 4:
-            review_titles.append(extract_text(review.find(class_="typography_heading-s__f7029 typography_appearance-default__AAY17")))
-            review_customers.append(extract_text(review.find(class_="typography_heading-xxs__QKBS8 typography_appearance-default__AAY17")))
+            review_titles.append(extract_text(review.find(class_="typography_heading-s__RxVny typography_appearance-default__t8iAq")))
+            review_customers.append(extract_text(review.find(class_="typography_heading-xxs__UmE9o typography_appearance-default__t8iAq")))
             review_dates.append(str(parse_review_date(extract_text(review.select_one(selector="time")))))
             review_ratings.append(f"Rated {rating_value} out of 5 stars")
-            review_texts.append(extract_text(review.find(class_="typography_body-l__KUYFJ typography_appearance-default__AAY17 typography_color-black__5LYEn"), ""))
+            review_texts.append(extract_text(review.find(class_="typography_body-l__v5JLj typography_appearance-default__t8iAq typography_color-black__wpn7m"), ""))
             
-            review_link_elem = review.find("a", href=True, class_="link_link__IZzHN")
+            review_link_elem = review.find("a", href=True, class_="link_link__jBdLV")
             if review_link_elem and "/reviews/" in review_link_elem["href"]:
                 review_link = f"https://www.trustpilot.com{review_link_elem['href']}"
             else:
