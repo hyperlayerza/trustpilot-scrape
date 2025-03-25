@@ -13,12 +13,11 @@ import os
 
 app = Flask(__name__)
 
-# Configurable domain
 domain = "hyperlayer.net"
 
 # Ensure the data directory exists and set up logging
-os.makedirs('data', exist_ok=True)
-logging.basicConfig(filename='data/scraper.log', level=logging.INFO)
+os.makedirs('/app/data', exist_ok=True)
+logging.basicConfig(filename='/app/data/scraper.log', level=logging.INFO)
 
 def scrape_trustpilot():
     try:
@@ -52,7 +51,6 @@ def scrape_trustpilot():
         for i in range(from_page, to_page + 1):
             response = requests.get(f"https://www.trustpilot.com/review/{domain}?page={i}")
             soup = BeautifulSoup(response.text, "html.parser")
-            
             if total_reviews is None:
                 total_reviews_elem = soup.find(class_="typography_body-l__v5JLj typography_appearance-default__t8iAq styles_reviewsAndRating__Syz6V")
                 total_reviews_text = extract_text(total_reviews_elem, "")
@@ -95,8 +93,8 @@ def scrape_trustpilot():
             "reviews": df_reviews.to_dict(orient='records')
         }
         
-        os.makedirs('data', exist_ok=True)
-        output_path = 'data/trustpilot_reviews_4star_up.json'
+        os.makedirs('/app/data', exist_ok=True)
+        output_path = '/app/data/trustpilot_reviews_4star_up.json'
         with open(output_path, 'w') as f:
             json.dump(output_data, f, indent=4)
         
@@ -106,16 +104,24 @@ def scrape_trustpilot():
 
 @app.route('/trustpilot_reviews_4star_up.json')
 def serve_json():
-    return send_from_directory('data', 'trustpilot_reviews_4star_up.json')
+    file_path = '/app/data/trustpilot_reviews_4star_up.json'
+    if os.path.exists(file_path):
+        return send_from_directory('/app/data', 'trustpilot_reviews_4star_up.json')
+    return {"message": "File not yet generated, please wait for the initial scrape"}, 503
 
 def run_scheduler():
+    # Initial scrape on startup
+    scrape_trustpilot()
+    # Schedule subsequent scrapes every 6 hours
     schedule.every(6).hours.do(scrape_trustpilot)
     while True:
         schedule.run_pending()
         time.sleep(60)
 
+# Start the scheduler thread immediately when the module is imported
+scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
+scheduler_thread.start()
+
 if __name__ == "__main__":
-    scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
-    scheduler_thread.start()
-    scrape_trustpilot()
+    # For local testing only; Gunicorn overrides this in Docker
     app.run(host='0.0.0.0', port=5050)
