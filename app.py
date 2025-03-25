@@ -13,6 +13,9 @@ import os
 
 app = Flask(__name__)
 
+# Configurable domain
+domain = "hyperlayer.net"
+
 # Ensure the data directory exists and set up logging
 os.makedirs('data', exist_ok=True)
 logging.basicConfig(filename='data/scraper.log', level=logging.INFO)
@@ -47,7 +50,7 @@ def scrape_trustpilot():
                 return dt.datetime.strptime(date_text, "%b %d, %Y").date()
 
         for i in range(from_page, to_page + 1):
-            response = requests.get(f"https://www.trustpilot.com/review/hyperlayer.net?page={i}")
+            response = requests.get(f"https://www.trustpilot.com/review/{domain}?page={i}")
             soup = BeautifulSoup(response.text, "html.parser")
             
             if total_reviews is None:
