@@ -41,23 +41,17 @@ def scrape_trustpilot():
         def extract_text(element, class_name=None):
             if element:
                 return element.get_text(strip=True)
-            if class_name:
-                logging.error(f"Can't find {class_name} class, please fix")
-            return ""
+            return ""  # Silently return empty string if element is not found
 
         def extract_rating(element, class_name=None):
             if element:
                 rating_child = element.findChild()
                 return int(rating_child["alt"].split()[1]) if rating_child else 0
-            if class_name:
-                logging.error(f"Can't find {class_name} class, please fix")
-            return 0
+            return 0  # Silently return 0 if element is not found
 
         def extract_elements(soup, class_name):
             elements = soup.find_all(class_=class_name)
-            if not elements:
-                logging.error(f"Can't find {class_name} class, please fix")
-            return elements
+            return elements  # Silently return empty list if elements are not found
 
         def parse_review_date(date_text):
             date_text = date_text.replace("Updated ", "")
@@ -75,37 +69,37 @@ def scrape_trustpilot():
             soup = BeautifulSoup(response.text, "html.parser")
             
             if total_reviews is None:
-                total_reviews_elem = soup.find(class_="typography_body-l__v5JLj typography_appearance-default__t8iAq styles_reviewsAndRating__Syz6V")
-                total_reviews_text = extract_text(total_reviews_elem, "typography_body-l__v5JLj typography_appearance-default__t8iAq styles_reviewsAndRating__Syz6V")
+                total_reviews_elem = soup.find(class_="typography_body-l__v5JLj typography_appearance-default__t8iAq styles_reviewsAndRating__OIRXy")
+                total_reviews_text = extract_text(total_reviews_elem)
                 total_reviews = re.search(r'\d+', total_reviews_text).group() if total_reviews_text else ""
 
             if overall_rating is None:
                 overall_rating_elem = soup.find(class_="typography_body-l__v5JLj typography_appearance-subtle__PYOVM")
-                overall_rating = extract_text(overall_rating_elem, "typography_body-l__v5JLj typography_appearance-subtle__PYOVM")
+                overall_rating = extract_text(overall_rating_elem)
 
-            reviews = extract_elements(soup, "paper_paper__EGeEb paper_square__owXbO card_card__yyGgu card_noPadding__OOiac card_square___AZeg styles_reviewCard__rvE5E")
+            reviews = extract_elements(soup, "paper_paper__EGeEb paper_square__owXbO card_card__yyGgu card_noPadding__OOiac card_square___AZeg styles_reviewCard__Qwhpy")
 
             for review in reviews:
                 rating_elem = review.find(class_="star-rating_starRating__sdbkn star-rating_medium__Oj7C9")
-                rating_value = extract_rating(rating_elem, "star-rating_starRating__sdbkn star-rating_medium__Oj7C9")
+                rating_value = extract_rating(rating_elem)
                 
                 if rating_value >= 4:
                     # Title: Use <h2> tag with the class
                     title_elem = review.find("h2", class_="typography_heading-xs__osRhC typography_appearance-default__t8iAq")
-                    review_titles.append(extract_text(title_elem, "typography_heading-xs__osRhC typography_appearance-default__t8iAq"))
+                    review_titles.append(extract_text(title_elem))
                     
                     # Customer: Use <span> tag with the class
                     customer_elem = review.find("span", class_="typography_heading-xs__osRhC typography_appearance-default__t8iAq")
-                    review_customers.append(extract_text(customer_elem, "typography_heading-xs__osRhC typography_appearance-default__t8iAq"))
+                    review_customers.append(extract_text(customer_elem))
                     
                     time_elem = review.select_one("time")
-                    date_text = extract_text(time_elem, "time")
+                    date_text = extract_text(time_elem)
                     review_dates.append(str(parse_review_date(date_text)) if date_text else "")
                     
                     review_ratings.append(f"Rated {rating_value} out of 5 stars")
                     
                     text_elem = review.find(class_="typography_body-l__v5JLj typography_appearance-default__t8iAq")
-                    review_texts.append(extract_text(text_elem, "typography_body-l__v5JLj typography_appearance-default__t8iAq"))
+                    review_texts.append(extract_text(text_elem))
                     
                     review_link_elem = review.find("a", href=True, class_="link_link__jBdLV")
                     review_link = f"https://www.trustpilot.com{review_link_elem['href']}" if review_link_elem and "/reviews/" in review_link_elem["href"] else ""
