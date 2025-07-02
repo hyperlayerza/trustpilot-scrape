@@ -69,7 +69,7 @@ def scrape_trustpilot():
             soup = BeautifulSoup(response.text, "html.parser")
             
             if total_reviews is None:
-                total_reviews_elem = soup.find(class_="typography_body-l__v5JLj typography_appearance-default__t8iAq styles_reviewsAndRating__OIRXy")
+                total_reviews_elem = soup.find(class_="CDS_Typography_appearance-default__bedfe1 CDS_Typography_body-l__bedfe1 styles_reviewsAndRating__OIRXy")
                 total_reviews_text = extract_text(total_reviews_elem)
                 total_reviews = re.search(r'\d+', total_reviews_text).group() if total_reviews_text else ""
 
