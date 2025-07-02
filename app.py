@@ -89,7 +89,7 @@ def scrape_trustpilot():
                     review_titles.append(extract_text(title_elem))
                     
                     # Customer: Use <span> tag with the class
-                    customer_elem = review.find("span", class_="typography_heading-xs__osRhC typography_appearance-default__t8iAq")
+                    customer_elem = review.find("span", class_="typography_heading-xs__osRhC typography_appearance-default__t8iAq styles_consumerName__xKr9c")
                     review_customers.append(extract_text(customer_elem))
                     
                     time_elem = review.select_one("time")
