@@ -119,7 +119,7 @@ def scrape_trustpilot():
                 return dt.datetime.now().date()
 
         # Get total reviews and calculate pages
-        response = requests.get(f"https://www.trustpilot.com/review/{domain}")
+        response = requests.get(f"https://www.trustpilot.com/review/{domain}", headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/127.0.0.0"})
         if response.status_code != 200:
             logging.error(f"Failed to fetch initial page: Status code {response.status_code}")
             return
@@ -138,7 +138,7 @@ def scrape_trustpilot():
         for page in range(from_page, to_page + 1):
             url = f"https://www.trustpilot.com/review/{domain}?page={page}"
             time.sleep(1)  # Avoid rate limiting
-            response = requests.get(url)
+            response = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/127.0.0.0"})
             if response.status_code != 200:
                 logging.error(f"Failed to fetch page {page}: Status code {response.status_code}")
                 break
@@ -164,22 +164,15 @@ def scrape_trustpilot():
                     reviews_data.append(review_data)
 
         # Save to JSON
-        output_data = {
-            "total_reviews": total_reviews,
-            "overall_rating": overall_rating,
-            "reviews": reviews_data
-        }
-        
-        output_dir = os.path.join(os.getcwd(), "data")
+        output_dir = os.path.join(os.path.dirname(__file__), "data")
         output_path = os.path.join(output_dir, "trustpilot_reviews_4star_up.json")
         os.makedirs(output_dir, exist_ok=True)
+        logging.info(f"Adding {len(reviews_data)} reviews to JSON at {os.path.abspath(output_path)}")
         
         with open(output_path, 'w') as f:
-            json.dump(output_data, f, indent=4)
+            json.dump({"total_reviews": total_reviews, "overall_rating": overall_rating, "reviews": reviews_data}, f, indent=4)
         
-        logging.info(f"Adding {len(reviews_data)} reviews to JSON")
-        if not reviews_data:
-            logging.error("No reviews collected. Check selectors and HTML structure.")
+        logging.info(f"Successfully added {len(reviews_data)} reviews to JSON")
 
     except Exception as e:
         logging.error(f"Error during scrape: {str(e)}")
@@ -187,12 +180,15 @@ def scrape_trustpilot():
 
 @app.route('/trustpilot_reviews_4star_up.json')
 def serve_json():
-    file_path = os.path.join(os.getcwd(), "data", "trustpilot_reviews_4star_up.json")
+    output_dir = os.path.join(os.path.dirname(__file__), "data")
+    file_path = os.path.join(output_dir, "trustpilot_reviews_4star_up.json")
+    logging.info(f"Serving JSON from {os.path.abspath(file_path)}")
     if os.path.exists(file_path):
-        return send_from_directory(os.path.join(os.getcwd(), "data"), "trustpilot_reviews_4star_up.json")
+        return send_from_directory(output_dir, "trustpilot_reviews_4star_up.json")
     return {"message": "File not yet generated, please wait for the initial scrape"}, 503
 
 def run_scheduler():
+    time.sleep(5)  # Wait for container startup
     scrape_trustpilot()
     schedule.every(6).hours.do(scrape_trustpilot)
     while True:
@@ -200,6 +196,10 @@ def run_scheduler():
         time.sleep(60)
 
 if __name__ == "__main__":
-    scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
-    scheduler_thread.start()
-    app.run(host='0.0.0.0', port=5050, debug=False)
+    import sys
+    if len(sys.argv) > 1 and sys.argv[1] == "test":
+        test_selectors()
+    else:
+        scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
+        scheduler_thread.start()
+        app.run(host='0.0.0.0', port=5050, debug=False)
