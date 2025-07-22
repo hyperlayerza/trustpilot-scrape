@@ -14,11 +14,14 @@ import os
 app = Flask(__name__)
 domain = "hyperlayer.net"
 
-# Set up logging with minimal output
+# Set up logging with file and console output
 logging.basicConfig(
     level=logging.INFO,
-    format='%(message)s',
-    handlers=[logging.StreamHandler()]
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('/app/data/scraper.log', mode='a')
+    ]
 )
 
 # Centralized selectors with comments for easy updates
@@ -58,7 +61,7 @@ SELECTORS = {
 def test_selectors(url="https://www.trustpilot.com/review/hyperlayer.net"):
     """Helper function to test selectors and print matched elements."""
     logging.info("Testing selectors...")
-    response = requests.get(url)
+    response = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/127.0.0.0"})
     if response.status_code != 200:
         logging.error(f"Failed to fetch page: Status code {response.status_code}")
         return
@@ -183,12 +186,16 @@ def serve_json():
     output_dir = os.path.join(os.path.dirname(__file__), "data")
     file_path = os.path.join(output_dir, "trustpilot_reviews_4star_up.json")
     logging.info(f"Serving JSON from {os.path.abspath(file_path)}")
-    if os.path.exists(file_path):
-        return send_from_directory(output_dir, "trustpilot_reviews_4star_up.json")
+    # Retry up to 3 times with 5-second intervals
+    for _ in range(3):
+        if os.path.exists(file_path):
+            return send_from_directory(output_dir, "trustpilot_reviews_4star_up.json")
+        logging.info("JSON file not found, waiting 5 seconds...")
+        time.sleep(5)
     return {"message": "File not yet generated, please wait for the initial scrape"}, 503
 
 def run_scheduler():
-    time.sleep(5)  # Wait for container startup
+    time.sleep(10)  # Wait for container startup and initial scrape
     scrape_trustpilot()
     schedule.every(6).hours.do(scrape_trustpilot)
     while True:

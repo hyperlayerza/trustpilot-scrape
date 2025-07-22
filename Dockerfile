@@ -1,23 +1,9 @@
-# Use official Python runtime as base image
 FROM python:3.12-slim-bullseye
-
-# Set working directory
 WORKDIR /app
-
-# Copy requirements file
 COPY requirements.txt .
-
-# Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Create volume for output
+RUN mkdir -p /app/data && chmod -R 777 /app/data
 VOLUME /app/data
-
-# Expose port
 EXPOSE 5050
-
-# Copy application code
 COPY . .
-
-# Run with Gunicorn
-CMD ["gunicorn", "--bind", "0.0.0.0:5050", "app:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5050", "--workers", "2", "--timeout", "60", "trustpilot_scraper:app"]
