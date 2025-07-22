@@ -12,46 +12,98 @@ import logging
 import os
 
 app = Flask(__name__)
-
 domain = "hyperlayer.net"
 
-# Set up logging to stdout
+# Set up logging with minimal output
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
+    format='%(message)s',
     handlers=[logging.StreamHandler()]
 )
 
-def scrape_trustpilot():
-    logging.info("Scraper started running")
-    try:
-        review_titles = []
-        review_customers = []
-        review_dates = []
-        review_ratings = []
-        review_texts = []
-        review_links = []
-        page_number = []
+# Centralized selectors with comments for easy updates
+SELECTORS = {
+    # Review card container: Outer <div> or <article> for each review, used to find all reviews on a page
+    "review_card": {"data-testid": "service-review-card-v2", "class": "styles_cardWrapper__.*"},
+    
+    # Rating: <div> with data-service-review-rating attribute or <img> with alt text, used for review_rating
+    "rating": {
+        "data_attr": "data-service-review-rating",
+        "img_class": "CDS_StarRating_starRating__8ae3cf",
+        "img_alt_pattern": r'Rated (\d+) out of 5 stars'
+    },
+    
+    # Customer name: <span> containing the reviewer's name, used for review_customer
+    "customer": {"class": "CDS_Typography_appearance-default__bedfe1 CDS_Typography_heading-xs__bedfe1 styles_consumerName__xKr9c"},
+    
+    # Title: <h2> containing the review title, used for review_title
+    "title": {"tag": "h2", "class": "CDS_Typography_appearance-default__bedfe1 CDS_Typography_heading-xs__bedfe1"},
+    
+    # Review text: <p> containing the review description, used for review_text
+    "text": {"tag": "p", "class": "CDS_Typography_appearance-default__bedfe1 CDS_Typography_body-l__bedfe1"},
+    
+    # Link: <a> with review URL, used for review_link
+    "link": {"tag": "a", "data_attr": "data-review-title-typography", "value": "true"},
+    
+    # Date: <time> containing the review date, used for review_date
+    "date": {"tag": "time"},
+    
+    # Total reviews: <div> with total review count, used for total_reviews
+    "total_reviews": {"class": "styles_reviewsAndRating__.*"},
+    
+    # Overall rating: <div> with average rating, used for overall_rating
+    "overall_rating": {"class": "CDS_Typography_appearance-default__.* CDS_Typography_display-m__.*"}
+}
 
-        overall_rating = None
+def test_selectors(url="https://www.trustpilot.com/review/hyperlayer.net"):
+    """Helper function to test selectors and print matched elements."""
+    logging.info("Testing selectors...")
+    response = requests.get(url)
+    if response.status_code != 200:
+        logging.error(f"Failed to fetch page: Status code {response.status_code}")
+        return
+    soup = BeautifulSoup(response.text, "html.parser")
+    
+    for key, selector in SELECTORS.items():
+        elements = []
+        if "data-testid" in selector:
+            elements = soup.find_all(attrs={"data-testid": selector["data-testid"]})
+        elif "data_attr" in selector:
+            elements = soup.find_all(attrs={selector["data_attr"]: True})
+        elif "class" in selector:
+            elements = soup.find_all(selector.get("tag", "div"), class_=re.compile(selector["class"]))
+        elif "tag" in selector:
+            elements = soup.find_all(selector["tag"])
+        
+        logging.info(f"Selector '{key}': Found {len(elements)} elements")
+        for i, elem in enumerate(elements[:3], 1):  # Limit to first 3 for brevity
+            logging.info(f"  Element {i}: {elem.get_text(strip=True)[:100]}...")
+
+def scrape_trustpilot():
+    logging.info("Scanning for reviews...")
+    try:
+        reviews_data = []
         total_reviews = None
+        overall_rating = None
         from_page = 1
         to_page = 10
 
-        def extract_text(element, class_name=None):
-            if element:
-                return element.get_text(strip=True)
-            return ""  # Silently return empty string if element is not found
+        def extract_text(element):
+            return element.get_text(strip=True) if element else ""
 
-        def extract_rating(element, class_name=None):
-            if element:
-                rating_child = element.findChild()
-                return int(rating_child["alt"].split()[1]) if rating_child else 0
-            return 0  # Silently return 0 if element is not found
-
-        def extract_elements(soup, class_name):
-            elements = soup.find_all(class_=class_name)
-            return elements  # Silently return empty list if elements are not found
+        def extract_rating(review):
+            # Try data attribute
+            rating_div = review.find("div", attrs={SELECTORS["rating"]["data_attr"]: True})
+            if rating_div and rating_div.get(SELECTORS["rating"]["data_attr"]):
+                return int(rating_div[SELECTORS["rating"]["data_attr"]])
+            
+            # Fallback to img alt text
+            rating_img = review.find("img", class_=re.compile(SELECTORS["rating"]["img_class"]))
+            if rating_img and rating_img.get("alt"):
+                match = re.search(SELECTORS["rating"]["img_alt_pattern"], rating_img["alt"])
+                if match:
+                    return int(match.group(1))
+            return 0
 
         def parse_review_date(date_text):
             date_text = date_text.replace("Updated ", "")
@@ -60,84 +112,75 @@ def scrape_trustpilot():
             elif "a day ago" in date_text.lower():
                 return dt.datetime.now().date() - dt.timedelta(days=1)
             elif "days ago" in date_text.lower():
-                return dt.datetime.now().date() - dt.timedelta(days=int(date_text[0]))
-            else:
+                return dt.datetime.now().date() - dt.timedelta(days=int(date_text.split()[0]))
+            try:
                 return dt.datetime.strptime(date_text, "%b %d, %Y").date()
+            except ValueError:
+                return dt.datetime.now().date()
 
-        for i in range(from_page, to_page + 1):
-            response = requests.get(f"https://www.trustpilot.com/review/{domain}?page={i}")
+        # Get total reviews and calculate pages
+        response = requests.get(f"https://www.trustpilot.com/review/{domain}")
+        if response.status_code != 200:
+            logging.error(f"Failed to fetch initial page: Status code {response.status_code}")
+            return
+        soup = BeautifulSoup(response.text, "html.parser")
+        
+        total_reviews_elem = soup.find(class_=re.compile(SELECTORS["total_reviews"]["class"]))
+        total_reviews_text = extract_text(total_reviews_elem)
+        total_reviews = int(re.search(r'\d+', total_reviews_text).group()) if total_reviews_text else 0
+        
+        overall_rating_elem = soup.find(class_=re.compile(SELECTORS["overall_rating"]["class"]))
+        overall_rating = extract_text(overall_rating_elem) or "N/A"
+        
+        to_page = min(to_page, (total_reviews // 20) + 1)
+
+        # Scrape reviews from each page
+        for page in range(from_page, to_page + 1):
+            url = f"https://www.trustpilot.com/review/{domain}?page={page}"
+            time.sleep(1)  # Avoid rate limiting
+            response = requests.get(url)
+            if response.status_code != 200:
+                logging.error(f"Failed to fetch page {page}: Status code {response.status_code}")
+                break
             soup = BeautifulSoup(response.text, "html.parser")
             
-            if total_reviews is None:
-                total_reviews_elem = soup.find(class_="CDS_Typography_appearance-default__bedfe1 CDS_Typography_body-l__bedfe1 styles_reviewsAndRating__OIRXy")
-                total_reviews_text = extract_text(total_reviews_elem)
-                total_reviews = re.search(r'\d+', total_reviews_text).group() if total_reviews_text else ""
-
-            if overall_rating is None:
-                overall_rating_elem = soup.find(class_="typography_body-l__v5JLj typography_appearance-subtle__PYOVM")
-                overall_rating = extract_text(overall_rating_elem)
-
-            reviews = extract_elements(soup, "paper_paper__EGeEb paper_square__owXbO card_card__yyGgu card_noPadding__OOiac card_square___AZeg styles_reviewCard__Qwhpy")
+            reviews = soup.find_all(attrs={"data-testid": SELECTORS["review_card"]["data-testid"]})
+            logging.info(f"{len(reviews)} reviews found on page {page}")
 
             for review in reviews:
-                rating_elem = review.find(class_="star-rating_starRating__sdbkn star-rating_medium__Oj7C9")
-                rating_value = extract_rating(rating_elem)
-                
-                if rating_value >= 4:
-                    # Title: Use <h2> tag with the class
-                    title_elem = review.find("h2", class_="typography_heading-xs__osRhC typography_appearance-default__t8iAq")
-                    review_titles.append(extract_text(title_elem))
-                    
-                    # Customer: Use <span> tag with the class
-                    customer_elem = review.find("span", class_="typography_heading-xs__osRhC typography_appearance-default__t8iAq styles_consumerName__xKr9c")
-                    review_customers.append(extract_text(customer_elem))
-                    
-                    time_elem = review.select_one("time")
-                    date_text = extract_text(time_elem)
-                    review_dates.append(str(parse_review_date(date_text)) if date_text else "")
-                    
-                    review_ratings.append(f"Rated {rating_value} out of 5 stars")
-                    
-                    text_elem = review.find(class_="typography_body-l__v5JLj typography_appearance-default__t8iAq")
-                    review_texts.append(extract_text(text_elem))
-                    
-                    review_link_elem = review.find("a", href=True, class_="link_link__jBdLV")
-                    review_link = f"https://www.trustpilot.com{review_link_elem['href']}" if review_link_elem and "/reviews/" in review_link_elem["href"] else ""
-                    if not review_link:
-                        logging.error("Can't find review link class 'link_link__jBdLV' or valid href, please fix")
-                    review_links.append(review_link)
-                    
-                    page_number.append(i)
+                rating = extract_rating(review)
+                if rating >= 4:
+                    review_data = {
+                        "review_customer": extract_text(review.find("span", class_=SELECTORS["customer"]["class"])),
+                        "review_title": extract_text(review.find(SELECTORS["title"]["tag"], class_=SELECTORS["title"]["class"])),
+                        "review_text": extract_text(review.find(SELECTORS["text"]["tag"], class_=SELECTORS["text"]["class"])),
+                        "review_link": f"https://www.trustpilot.com{review_link_elem['href']}" if (review_link_elem := review.find(SELECTORS["link"]["tag"], attrs={SELECTORS["link"]["data_attr"]: SELECTORS["link"]["value"]})) and review_link_elem.get("href") else "",
+                        "review_date": str(parse_review_date(extract_text(review.find(SELECTORS["date"]["tag"])))),
+                        "review_rating": f"Rated {rating} out of 5 stars",
+                        "page_number": page
+                    }
+                    if not review_data["review_link"]:
+                        logging.warning("No valid review link found for a review")
+                    reviews_data.append(review_data)
 
-        df_reviews = pd.DataFrame({
-            'review_title': review_titles,
-            'review_customer': review_customers,
-            'review_date': review_dates,
-            'review_rating': review_ratings,
-            'review_text': review_texts,
-            'review_link': review_links,
-            'page_number': page_number
-        })
-
+        # Save to JSON
         output_data = {
             "total_reviews": total_reviews,
             "overall_rating": overall_rating,
-            "reviews": df_reviews.to_dict(orient='records')
+            "reviews": reviews_data
         }
         
         output_dir = os.path.join(os.getcwd(), "data")
         output_path = os.path.join(output_dir, "trustpilot_reviews_4star_up.json")
-        logging.info(f"Attempting to write JSON to {output_path}")
-        
         os.makedirs(output_dir, exist_ok=True)
-        logging.info(f"Directory {output_dir} exists or was created")
         
         with open(output_path, 'w') as f:
             json.dump(output_data, f, indent=4)
-        logging.info(f"Successfully wrote JSON to {output_path}")
-        logging.info(f"File size: {os.path.getsize(output_path)} bytes")
+        
+        logging.info(f"Adding {len(reviews_data)} reviews to JSON")
+        if not reviews_data:
+            logging.error("No reviews collected. Check selectors and HTML structure.")
 
-        logging.info(f"Scraper ran successfully and pulled data: {len(df_reviews)} reviews collected")
     except Exception as e:
         logging.error(f"Error during scrape: {str(e)}")
         raise
@@ -150,15 +193,13 @@ def serve_json():
     return {"message": "File not yet generated, please wait for the initial scrape"}, 503
 
 def run_scheduler():
-    scrape_trustpilot()  # Initial scrape
+    scrape_trustpilot()
     schedule.every(6).hours.do(scrape_trustpilot)
     while True:
         schedule.run_pending()
         time.sleep(60)
 
-# Start scheduler in a separate thread
-scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
-scheduler_thread.start()
-
 if __name__ == "__main__":
+    scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
+    scheduler_thread.start()
     app.run(host='0.0.0.0', port=5050, debug=False)
