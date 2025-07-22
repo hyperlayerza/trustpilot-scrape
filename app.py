@@ -209,4 +209,5 @@ if __name__ == "__main__":
     else:
         scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
         scheduler_thread.start()
-        app.run(host='0.0.0.0', port=5050, debug=False)
+        # Do NOT start app.run() when using gunicorn
+        # app.run(host='0.0.0.0', port=5050, debug=False)
