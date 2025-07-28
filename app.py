@@ -39,17 +39,17 @@ SELECTORS = {
     },
     # Customer name: <span> containing the reviewer's name, used for review_customer
     "customer": {
-        "class": "CDS_Typography_appearance-default__bedfe1 CDS_Typography_heading-xs__bedfe1 styles_consumerName__xKr9c"
+        "class": "CDS_Typography_appearance-default__96c1da CDS_Typography_prettyStyle__96c1da CDS_Typography_heading-xs__96c1da styles_consumerName__xKr9c"
     },
     # Title: <h2> containing the review title, used for review_title
     "title": {
         "tag": "h2",
-        "class": "CDS_Typography_appearance-default__bedfe1 CDS_Typography_heading-xs__bedfe1",
+        "class": "CDS_Typography_appearance-default__96c1da CDS_Typography_prettyStyle__96c1da CDS_Typography_heading-xs__96c1da",
     },
     # Review text: <p> containing the review description, used for review_text
     "text": {
         "tag": "p",
-        "class": "CDS_Typography_appearance-default__bedfe1 CDS_Typography_body-l__bedfe1",
+        "class": "CDS_Typography_appearance-default__96c1da CDS_Typography_prettyStyle__96c1da CDS_Typography_body-l__96c1da",
     },
     # Link: <a> with review URL, used for review_link
     "link": {"tag": "a", "data_attr": "data-review-title-typography", "value": "true"},
@@ -287,7 +287,7 @@ def serve_json():
 def run_scheduler():
     time.sleep(10)  # Wait for container startup and initial scrape
     scrape_trustpilot()
-    schedule.every(6).hours.do(scrape_trustpilot)
+    schedule.every(12).hours.do(scrape_trustpilot)
     while True:
         schedule.run_pending()
         time.sleep(60)
